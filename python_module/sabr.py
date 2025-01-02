@@ -58,7 +58,7 @@ def compute_montecarlo(F, T, alpha, beta, rho, nu, n_steps, n_paths):
     sigma_ts = pd.DataFrame(sigma_ts).transpose()
     return F_ts, sigma_ts
 
-def compute_parameters(F, T, strikes, market_vols, init_guess=[0.1, 0.0, 0.3], lower_bounds=[1e-6, -0.9999, 1e-6], upper_bounds = [1, 0.9999, 3]):
+def solve_parameters(F, T, strikes, market_vols, init_guess=[0.1, 0.0, 0.3], lower_bounds=[1e-6, -0.9999, 1e-6], upper_bounds = [1, 0.9999, 3]):
 
     def objective_function(params, F, strikes, T, market_vols):
         alpha, rho, nu = params
