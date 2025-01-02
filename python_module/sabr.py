@@ -70,3 +70,15 @@ def compute_parameters(F, T, strikes, market_vols, init_guess=[0.1, 0.0, 0.3], l
     result = least_squares(objective_function, x0=init_guess, args=(F, strikes, T, market_vols), bounds=bounds)
     calibrated_alpha, calibrated_rho, calibrated_nu = result.x
     return calibrated_alpha, calibrated_rho, calibrated_nu
+
+def solve_alpha(F, T, rho, nu, r, K_min, K_max, target_vol, init_guess=[0.1], lower_bounds=[1e-6], upper_bounds=[1]):
+
+    def objective_function(params, F, T, rho, nu, r, K_min, K_max, target_vol):
+        alpha = params
+        implied_vol = np.sqrt(compute_varswap(F=F, T=T, alpha=alpha, beta=1, rho=rho, nu=nu, r=r, K_min=K_min, K_max=K_max))
+        return implied_vol - target_vol
+
+    bounds = (lower_bounds, upper_bounds)
+    result = least_squares(objective_function, x0=init_guess, args=(F, T, rho, nu, r, K_min, K_max, target_vol), bounds=bounds)
+    calibrated_alpha = result.x
+    return calibrated_alpha[0]
