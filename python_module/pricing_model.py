@@ -58,6 +58,7 @@ class BlackScholesModel:
         return np.nan
 
 class SABRModel:
+
     def __init__(self):
         pass
 
@@ -154,3 +155,42 @@ class SABRModel:
         result = least_squares(objective_function, x0=init_guess, args=(F, T, rho, nu, r, K_min, K_max, K_var), bounds=bounds)
         calibrated_alpha = result.x
         return calibrated_alpha[0]
+
+class HestonModel:
+    
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def compute_monte_carlo(S0, K, T, r, v0, theta, kappa, xi, rho, n_simulations, n_steps):
+        dt = T / n_steps
+        prices = np.zeros((n_simulations, n_steps + 1))
+        variances = np.zeros((n_simulations, n_steps + 1))
+        
+        prices[:, 0] = S0
+        variances[:, 0] = v0
+        
+        np.random.seed(42)
+        Z1 = np.random.normal(size=(n_simulations, n_steps))
+        np.random.seed(43)
+        Z2 = np.random.normal(size=(n_simulations, n_steps))
+        W1 = Z1
+        W2 = rho * Z1 + np.sqrt(1 - rho**2) * Z2
+
+        for t in range(1, n_steps + 1):
+            
+            variances[:, t] = np.maximum(
+                variances[:, t - 1] + kappa * (theta - variances[:, t - 1]) * dt +
+                xi * np.sqrt(variances[:, t - 1] * dt) * W2[:, t - 1],
+                0
+            )
+            
+            prices[:, t] = prices[:, t - 1] * np.exp(
+                (r - 0.5 * variances[:, t - 1]) * dt +
+                np.sqrt(variances[:, t - 1] * dt) * W1[:, t - 1]
+            )
+
+        prices = pd.DataFrame(prices).transpose()
+        variances = pd.DataFrame(variances).transpose()
+
+        return prices, variances
