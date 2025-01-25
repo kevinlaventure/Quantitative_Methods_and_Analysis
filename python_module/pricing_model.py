@@ -112,14 +112,20 @@ class SABRModel:
         vs['dk'] = vs['k'].diff().fillna(0)
         k_var = np.sum((vs['pv']/vs['k'].pow(2)) * vs['dk']) * (2/T)
         return k_var
-
+ 
     @staticmethod
-    def compute_montecarlo(F, T, alpha, beta, rho, nu, n_steps, n_paths):
+    def compute_montecarlo(F, T, alpha, beta, rho, nu, n_steps, n_paths, seed=True):
         dt = T / n_steps
-        np.random.seed(42)
-        dW = np.random.normal(0, np.sqrt(dt), (n_paths, n_steps))
-        np.random.seed(43)
-        dZ = rho * dW + np.sqrt(1 - rho ** 2) * np.random.normal(0, np.sqrt(dt), (n_paths, n_steps))
+
+        if seed:
+            np.random.seed(44)
+            dW = np.random.normal(0, np.sqrt(dt), (n_paths, n_steps))
+            np.random.seed(45)
+            dZ = rho * dW + np.sqrt(1 - rho ** 2) * np.random.normal(0, np.sqrt(dt), (n_paths, n_steps))
+        else:
+            dW = np.random.normal(0, np.sqrt(dt), (n_paths, n_steps))
+            dZ = rho * dW + np.sqrt(1 - rho ** 2) * np.random.normal(0, np.sqrt(dt), (n_paths, n_steps))
+
         F_ts = np.zeros((n_paths, n_steps + 1))
         sigma_ts = np.zeros((n_paths, n_steps + 1))
         F_ts[:, 0] = F
