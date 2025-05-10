@@ -168,7 +168,7 @@ class HestonModel:
         pass
 
     @staticmethod
-    def compute_monte_carlo(S0, K, T, r, v0, theta, kappa, xi, rho, n_simulations, n_steps):
+    def compute_monte_carlo(S0, T, r, v0, theta, kappa, xi, rho, n_simulations, n_steps):
         dt = T / n_steps
         prices = np.zeros((n_simulations, n_steps + 1))
         variances = np.zeros((n_simulations, n_steps + 1))
