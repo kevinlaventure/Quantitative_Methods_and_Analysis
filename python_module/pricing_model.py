@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-from scipy.optimize import least_squares
+from scipy.optimize import least_squares, minimize
 
 class BlackScholesModel:
     def __init__(self):
@@ -94,9 +94,33 @@ class SABRModel:
             delta_hedge_pnl = S0*pricing_results['delta']*slide*-1
             option_pnl = price_bumped - pricing_results['price']
             total_pnl = delta_hedge_pnl + option_pnl
-            pricing_results[f'slide pnl {slide}'] = total_pnl
+            pricing_results[slide] = total_pnl
 
         return {'IV': IV, **pricing_results}
+
+    @staticmethod
+    def solve_delta_strike(F, T, alpha, beta, rho, nu, r, option_type, target_delta):
+        """
+        Solve for the strike K that produces a given target delta.
+        
+        Parameters:
+        F: Forward price
+        T: Time to expiration
+        alpha, beta, rho, nu: SABR parameters
+        r: Risk-free rate
+        option_type: 'call' or 'put'
+        target_delta: Target delta value
+        
+        Returns:
+        K: Strike that produces the target delta
+        """
+        def abs_delta_objective(K):
+            option_result = SABRModel.compute_option(F, K[0], T, alpha, beta, rho, nu, r, option_type)
+            return (option_result['delta'] - target_delta)**2
+
+        result = minimize(abs_delta_objective, x0=[F], bounds=[(F * 0.01, F * 20.0)], method='L-BFGS-B')
+        return result.x[0]
+            
 
     @staticmethod
     def compute_varswap(F, T, alpha, beta, rho, nu, r, K_min, K_max):
