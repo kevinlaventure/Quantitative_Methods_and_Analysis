@@ -79,7 +79,7 @@ class SABRModel:
         return sigma_imp
 
     @staticmethod
-    def compute_option(F, K, T, alpha, beta, rho, nu, r, option_type, slide_list=[]):
+    def compute_option(F, K, T, alpha, beta, rho, nu, r, option_type, slide_list=[], delta_hedged_slide=True):
         IV = SABRModel.compute_sigma(F, K, T, alpha, beta, rho, nu)
         S0 = F * np.exp(-r*T)
         pricing_results = BlackScholesModel.compute_option(S0, K, T, r, IV, option_type, True)
@@ -91,10 +91,13 @@ class SABRModel:
             IV_bumped = SABRModel.compute_sigma(F_bumped, K, T, alpha_bumped, beta, rho, nu)
             S0_bumped = F_bumped * np.exp(-r * T)
             price_bumped = BlackScholesModel.compute_option(S0_bumped, K, T, r, IV_bumped, option_type, False)
-            delta_hedge_pnl = S0*pricing_results['delta']*slide*-1
             option_pnl = price_bumped - pricing_results['price']
-            total_pnl = delta_hedge_pnl + option_pnl
-            pricing_results[slide] = total_pnl
+            if delta_hedged_slide:
+                delta_hedge_pnl = S0*pricing_results['delta']*slide*-1
+                total_pnl = delta_hedge_pnl + option_pnl
+                pricing_results[slide] = total_pnl
+            else:
+                pricing_results[slide] = option_pnl
 
         return {'IV': IV, **pricing_results}
 
