@@ -1,7 +1,11 @@
 # Built-in
+import math
 import numpy as np
+from scipy.stats import norm
 from numpy.linalg import inv
 from datetime import timedelta
+from scipy.optimize import brentq
+from scipy.optimize import least_squares
 from sklearn.linear_model import LinearRegression
 
 def estimate_df_and_forward(K, C_mid, P_mid, spreads=None, absolute_sigma=False):
@@ -101,10 +105,6 @@ def estimate_df_and_forward(K, C_mid, P_mid, spreads=None, absolute_sigma=False)
         "sigma2": float(sigma2),
     }
 
-import math
-from scipy.stats import norm
-from scipy.optimize import brentq
-
 def black76(F, K, T, r, sigma, option="call"):
     """
     Black-76 price & Greeks (European on forward).
@@ -176,8 +176,6 @@ def implied_vol_black76(target_price, F, K, T, r, option="call", tol=1e-8, hi=5.
             raise ValueError("Failed to bracket root; increase 'hi' or check inputs.")
     return float(brentq(f, 1e-12, hi, xtol=tol, rtol=tol, maxiter=200))
 
-import math
-
 def sabr_price(F, K, T, r, option, alpha, beta, rho, nu, return_iv=False, eps=1e-12):
     """
     Price a European option under SABR (Hagan 2002) by feeding Black-76 with SABR vol.
@@ -234,9 +232,6 @@ def sabr_price(F, K, T, r, option, alpha, beta, rho, nu, return_iv=False, eps=1e
     # Use your Black-76 function
     out = black76(F, K, T, r, max(iv, 1e-12), option)
     return (out["price"], iv) if return_iv else out["price"]
-
-import numpy as np
-from scipy.optimize import least_squares
 
 def sabr_calibrate(prices, opt_types, K, F, T, r,
                    x0=None, bounds=None, use_vega_weights=True):
