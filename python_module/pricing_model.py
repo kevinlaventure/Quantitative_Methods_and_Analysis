@@ -248,7 +248,7 @@ class SABRModel:
     @staticmethod
     def compute_montecarlo(
         F: float, T: float, alpha: float, beta: float, rho: float, nu: float,
-        n_steps: int, n_paths: int, seed: bool = True
+        n_steps: int, n_paths: int, seed: bool = True, seed_value: Optional[int] = 44
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Simulates SABR paths using Euler-Maruyama.
@@ -264,9 +264,9 @@ class SABRModel:
         """
         dt = T / n_steps
         if seed:
-            np.random.seed(44)
+            np.random.seed(seed_value)
             dW = np.random.normal(0, np.sqrt(dt), (n_paths, n_steps))
-            np.random.seed(45)
+            np.random.seed(seed_value + 1)
             dZ = rho * dW + np.sqrt(1 - rho ** 2) * np.random.normal(0, np.sqrt(dt), (n_paths, n_steps))
         else:
             dW = np.random.normal(0, np.sqrt(dt), (n_paths, n_steps))
