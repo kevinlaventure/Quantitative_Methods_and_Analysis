@@ -4,15 +4,97 @@ import scipy.stats as stats
 from scipy.optimize import least_squares, minimize
 from typing import Dict, Any, List, Optional, Union, Tuple
 
-class BlackScholesModel:
-    """
-    Implements the Black-Scholes option pricing model and related calculations.
-    """
+class BSMModel:
+  
+    @staticmethod
+    def compute_option_with_forward(
+        F: float, K: float, T: float, r: float, sigma: float,
+        option_type: str, compute_greeks: bool = False
+    ) -> Union[float, Dict[str, Any]]:
+        """
+        Computes the Black-76 price and (optionally) Greeks for a European option on forwards.
+
+        Args:
+            F: Forward price
+            K: Strike price
+            T: Time to maturity (in years)
+            r: Risk-free rate
+            sigma: Volatility
+            option_type: 'call' or 'put'
+            compute_greeks: If True, returns price and Greeks
+
+        Returns:
+            Option price or dict with price and Greeks including vanna and volga
+        """
+        if T == 0:
+            price = max(F - K, 0) if option_type == "call" else max(K - F, 0)
+            if not compute_greeks:
+                return price
+            return {
+                "price": price, "delta": np.nan, "gamma": np.nan,
+                "vega": np.nan, "theta": np.nan, "vanna": np.nan, "volga": np.nan
+            }
+
+        d1 = (np.log(F / K) + (0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+        d2 = d1 - sigma * np.sqrt(T)
+        discount = np.exp(-r * T)
+
+        if option_type == "call":
+            price = discount * (F * stats.norm.cdf(d1) - K * stats.norm.cdf(d2))
+        elif option_type == "put":
+            price = discount * (K * stats.norm.cdf(-d2) - F * stats.norm.cdf(-d1))
+        else:
+            raise ValueError("Invalid option type. Choose 'call' or 'put'.")
+
+        if not compute_greeks:
+            return price
+
+        # Greeks calculations
+        delta = discount * stats.norm.cdf(d1) if option_type == "call" else discount * (stats.norm.cdf(d1) - 1)
+        gamma = discount * stats.norm.pdf(d1) / (F * sigma * np.sqrt(T))
+        vega = discount * F * stats.norm.pdf(d1) * np.sqrt(T) / 100
+        theta = (
+            -F * stats.norm.pdf(d1) * sigma / (2 * np.sqrt(T)) * discount 
+            + r * price
+        ) / 250
+        
+        # Additional Greeks
+        vanna = -discount * ((d2 * stats.norm.pdf(d1)) / sigma)  # Vanna computation
+        volga = vega * 100 * (d1 * d2 / sigma)  # Volga computation
+
+        return {
+            "price": price,
+            "delta": delta,
+            "gamma": gamma,
+            "vega": vega,
+            "theta": theta,
+            "vanna": vanna,
+            "volga": volga
+        }
 
     @staticmethod
-    def compute_option(
-        S: float, K: float, T: float, r: float, sigma: float,
-        option_type: str, compute_greeks: bool = False
+    def compute_forward(
+        S: float, T: float, r: float, g: float, q: float
+        ) -> float:
+        """
+        Computes the forward price.
+
+        Args:
+            S: Spot price
+            T: Time to maturity (in years)
+            r: Risk-free rate
+            g: Growth spread
+            q: Dividend yield
+
+        Returns:
+            Forward price
+        """
+        return S * np.exp((r + g - q) * T)
+
+    @staticmethod
+    def compute_option_with_spot(
+        S: float, K: float, T: float, r: float, g: float, q: float,
+        sigma: float, option_type: str, compute_greeks: bool = False
     ) -> Union[float, Dict[str, Any]]:
         """
         Computes the Black-Scholes price and (optionally) Greeks for a European option.
@@ -22,6 +104,8 @@ class BlackScholesModel:
             K: Strike price
             T: Time to maturity (in years)
             r: Risk-free rate
+            g: Growth spread
+            q: Dividend yield
             sigma: Volatility
             option_type: 'call' or 'put'
             compute_greeks: If True, returns price and Greeks
@@ -29,56 +113,21 @@ class BlackScholesModel:
         Returns:
             Option price or dict with price and Greeks
         """
-        if T > 0:
-            d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-            d2 = d1 - sigma * np.sqrt(T)
-        else:
-            d1 = d2 = np.nan
-
-        if option_type == "call":
-            price = max(S - K, 0) if T == 0 else S * stats.norm.cdf(d1) - K * np.exp(-r * T) * stats.norm.cdf(d2)
-        elif option_type == "put":
-            price = max(K - S, 0) if T == 0 else K * np.exp(-r * T) * stats.norm.cdf(-d2) - S * stats.norm.cdf(-d1)
-        else:
-            raise ValueError("Invalid option type. Choose 'call' or 'put'.")
-
-        if not compute_greeks:
-            return price
-
-        if T == 0:
-            # Greeks are undefined at expiry
-            return {
-                "price": price, "delta": np.nan, "gamma": np.nan, "gamma_cash": np.nan,
-                "vega": np.nan, "theta": np.nan, "vanna": np.nan, "volga": np.nan
-            }
-
-        # Greeks calculations
-        delta = stats.norm.cdf(d1) if option_type == "call" else stats.norm.cdf(d1) - 1
-        gamma = stats.norm.pdf(d1) / (S * sigma * np.sqrt(T))
-        vega = S * stats.norm.pdf(d1) * np.sqrt(T) / 100
-        theta = (
-            -S * stats.norm.pdf(d1) * sigma / (2 * np.sqrt(T))
-            - r * K * np.exp(-r * T) * stats.norm.cdf(d2 if option_type == "call" else -d2)
-        ) / 250
-        vanna = -((d2 * stats.norm.pdf(-d1)) / sigma)
-        volga = vega * 100 * d1 * d2 / sigma
-        gamma_cash = (gamma * S ** 2) / 100
-
-        return {
-            "price": price, "delta": delta, "gamma": gamma, "gamma_cash": gamma_cash,
-            "vega": vega, "theta": theta, "vanna": vanna, "volga": volga
-        }
-
+        F = BSMModel.compute_forward(S, T, r, g, q)
+        result = BSMModel.compute_option_with_forward(F, K, T, r, sigma, option_type, compute_greeks)
+        return result
+    
     @staticmethod
     def solve_sigma(
-        S: float, K: float, T: float, r: float, market_price: float,
+        F: float, K: float, T: float, r: float, market_price: float,
         option_type: str, sigma_init: float = 0.2, tol: float = 1e-5, max_iter: int = 1000
     ) -> float:
+
         """
         Solves for implied volatility using Newton-Raphson method.
 
         Args:
-            S, K, T, r, market_price, option_type: Option parameters
+            F, K, T, r, market_price, option_type: Option parameters
             sigma_init: Initial guess for volatility
             tol: Tolerance for convergence
             max_iter: Maximum iterations
@@ -88,7 +137,7 @@ class BlackScholesModel:
         """
         sigma = sigma_init
         for _ in range(max_iter):
-            result = BlackScholesModel.compute_option(S, K, T, r, sigma, option_type, compute_greeks=True)
+            result = BSMModel.compute_option_with_forward(F, K, T, r, sigma, option_type, compute_greeks=True)
             price = result['price']
             vega = result['vega'] * 100  # Undo /100 in vega
             if vega == 0:
@@ -98,10 +147,43 @@ class BlackScholesModel:
                 return sigma
         return np.nan
 
+    @staticmethod
+    def compute_montecarlo(
+        S: float, T: float, r: float, g: float, q: float,
+        sigma: float, n_steps: int, n_paths: int, seed: bool = True, seed_value: Optional[int] = 44
+    ) -> pd.DataFrame:
+        """
+        Simulates asset price paths using Geometric Brownian Motion.
+
+        Args:
+            S: Spot price
+            T: Time to maturity (in years)
+            r: Risk-free rate
+            g: Growth spread
+            q: Dividend yield
+            sigma: Volatility
+            n_steps: Number of time steps
+            n_paths: Number of simulation paths
+            seed: If True, sets random seed for reproducibility
+
+        Returns:
+            DataFrame of simulated paths (rows: time steps, columns: paths)
+        """
+        dt = T / n_steps
+        if seed:
+            np.random.seed(seed_value)
+        dW = np.random.normal(0, np.sqrt(dt), (n_paths, n_steps))
+        
+        S_ts = np.zeros((n_paths, n_steps + 1))
+        S_ts[:, 0] = S
+        
+        for i in range(1, n_steps + 1):
+            S_ts[:, i] = S_ts[:, i - 1] * np.exp((r + g - q - 0.5 * sigma ** 2) * dt + sigma * dW[:, i - 1])
+        
+        return pd.DataFrame(S_ts).transpose()
+
+
 class SABRModel:
-    """
-    Implements the SABR stochastic volatility model and related calculations.
-    """
 
     @staticmethod
     def compute_sigma(
@@ -162,8 +244,7 @@ class SABRModel:
         """
         slide_list = slide_list or []
         iv = SABRModel.compute_sigma(F, K, T, alpha, beta, rho, nu)
-        S0 = F * np.exp(-r * T)
-        base_result = BlackScholesModel.compute_option(S0, K, T, r, iv, option_type, True)
+        base_result = BSMModel.compute_option_with_forward(F, K, T, r, iv, option_type, True)
 
         for slide in slide_list:
             if slide_type == 'spot_vol':
@@ -171,25 +252,22 @@ class SABRModel:
                 dsigma = (nu / alpha) * rho * slide
                 alpha_bumped = alpha * (1 + dsigma)
                 iv_bumped = SABRModel.compute_sigma(F_bumped, K, T, alpha_bumped, beta, rho, nu)
-                S0_bumped = F_bumped * np.exp(-r * T)
-                bumped_result = BlackScholesModel.compute_option(S0_bumped, K, T, r, iv_bumped, option_type, True)
+                bumped_result = BSMModel.compute_option_with_forward(F_bumped, K, T, r, iv_bumped, option_type, True)
             elif slide_type == 'spot_only':
                 F_bumped = F * (1 + slide)
-                S0_bumped = F_bumped * np.exp(-r * T)
                 iv_bumped = SABRModel.compute_sigma(F, K, T, alpha, beta, rho, nu)
-                bumped_result = BlackScholesModel.compute_option(S0_bumped, K, T, r, iv_bumped, option_type, True)
+                bumped_result = BSMModel.compute_option_with_forward(F_bumped, K, T, r, iv_bumped, option_type, True)
             else:
                 continue
-
             if slide_compute == 'delta_hedged_pnl':
                 option_pnl = bumped_result['price'] - base_result['price']
-                delta_hedge_pnl = S0 * base_result['delta'] * slide * -1
+                delta_hedge_pnl = F * base_result['delta'] * slide * -1
                 total_pnl = delta_hedge_pnl + option_pnl
                 base_result[slide] = total_pnl
             elif slide_compute == 'option_pnl':
                 base_result[slide] = bumped_result['price'] - base_result['price']
             elif slide_compute == 'delta_pnl':
-                base_result[slide] = S0 * base_result['delta'] * slide * -1
+                base_result[slide] = F * base_result['delta'] * slide * -1
             else:
                 base_result[slide] = bumped_result.get(slide_compute, np.nan)
 
@@ -339,3 +417,82 @@ class SABRModel:
         bounds = (lower_bounds, upper_bounds)
         result = least_squares(objective, x0=init_guess, args=(F, T, rho, nu, r, K_min, K_max, K_var), bounds=bounds)
         return result.x[0]
+    
+    
+class HestonHullWhiteModel:
+
+    @staticmethod
+    def compute_montecarlo(
+        S0: float, v0: float, r0: float, b0: float,
+        kappa_v: float, theta_v: float, sigma_v: float,
+        kappa_r: float, theta_r: float, sigma_r: float,
+        rho_sv: float, rho_sr: float, rho_vr: float,
+        T: float, N: int, M: int,
+        seed: bool = True, seed_value: Optional[int] = 44
+        ) -> Dict[int, Dict[str, np.ndarray]]:
+    
+        """
+        Simulate Monte Carlo paths under the Heston-Hull-White model with risk control,
+        allowing an override of the first Brownian increment dW1 at t=1 while preserving
+        the correlation structure with dW2 and dW3.
+
+        If override_dW1 is provided, it will replace the random dW1 at t=1 for all paths.
+        """
+        dt = T / M
+
+        # Build correlation matrix and its Cholesky factor
+        corr = np.array([
+            [1.0, rho_sv, rho_sr],
+            [rho_sv, 1.0, rho_vr],
+            [rho_sr, rho_vr, 1.0]
+        ])
+        
+        L = np.linalg.cholesky(corr)
+
+        # Allocate arrays
+        S = np.zeros((M + 1, N))
+        v = np.zeros((M + 1, N))
+        r = np.zeros((M + 1, N))
+        S[0, :] = S0
+        v[0, :] = v0
+        r[0, :] = r0
+
+        if seed:
+            rng = np.random.default_rng(seed_value)
+        else:
+            rng = np.random.default_rng()
+
+        sqrt_dt = np.sqrt(dt)
+
+        for t in range(1, M + 1):
+
+            # Generate independent standard normals
+            Z = rng.standard_normal((3, N))
+
+            # Compute correlated increments
+            dW = L @ Z * sqrt_dt
+            dW1, dW2, dW3 = dW[0], dW[1], dW[2]
+
+            # Full-truncation Euler for variance
+            v_prev = np.maximum(v[t-1, :], 0.0)
+            v[t, :] = (
+                v[t-1, :]
+                + kappa_v * (theta_v - v_prev) * dt
+                + sigma_v * np.sqrt(v_prev) * dW2
+            )
+            v[t, :] = np.maximum(v[t, :], 0.0)
+
+            # Hull-White short rate
+            r[t, :] = (
+                r[t-1, :]
+                + kappa_r * (theta_r - r[t-1, :]) * dt
+                + sigma_r * dW3
+            )
+
+            # Asset price log-Euler
+            S[t, :] = (
+                S[t-1, :]
+                * np.exp((r[t-1, :] + b0 - 0.5 * v_prev) * dt + np.sqrt(v_prev) * dW1)
+            )
+        
+        return S, v, r
