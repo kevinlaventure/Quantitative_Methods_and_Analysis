@@ -56,7 +56,7 @@ class BSMModel:
         theta = (
             -F * stats.norm.pdf(d1) * sigma / (2 * np.sqrt(T)) * discount 
             + r * price
-        ) / 250
+        ) / 252
         
         # Additional Greeks
         vanna = -discount * ((d2 * stats.norm.pdf(d1)) / sigma)  # Vanna computation
@@ -182,6 +182,78 @@ class BSMModel:
         
         return pd.DataFrame(S_ts).transpose()
 
+    @staticmethod
+    def compute_pnl_attribution(
+        F_start: float, F_end: float,
+        K: float, T_start: float, T_end: float,
+        r: float, sigma_start: float, sigma_end: float,
+        option_type: str
+    ) -> Dict[str, float]:
+        """
+        Computes P&L attribution for an option position using Greeks.
+        
+        Args:
+            F_start: Initial forward price
+            F_end: Final forward price
+            K: Strike price
+            T_start: Initial time to maturity
+            T_end: Final time to maturity
+            r: Risk-free rate
+            sigma_start: Initial volatility
+            sigma_end: Final volatility
+            option_type: 'call' or 'put'
+        
+        Returns:
+            Dictionary containing P&L components and total P&L
+        """
+        # Calculate time difference
+        dT = T_end - T_start
+        
+        # Calculate price changes
+        dF = F_end - F_start
+        dsigma = sigma_end - sigma_start
+        
+        # Get initial Greeks and price
+        start_result = BSMModel.compute_option_with_forward(
+            F_start, K, T_start, r, sigma_start, option_type, compute_greeks=True
+        )
+        
+        # Get final price
+        end_result = BSMModel.compute_option_with_forward(
+            F_end, K, T_end, r, sigma_end, option_type, compute_greeks=False
+        )
+        
+        # Extract Greeks
+        delta = start_result['delta']
+        gamma = start_result['gamma']
+        vega = start_result['vega']
+        theta = start_result['theta']
+        vanna = start_result['vanna']
+        volga = start_result['volga']
+        
+        # Calculate P&L components
+        delta_pnl = delta * dF
+        gamma_pnl = 0.5 * gamma * dF * dF
+        theta_pnl = (theta * -250) * dT
+        vega_pnl = (vega * 100) * dsigma
+        vanna_pnl = vanna * dF * dsigma
+        volga_pnl = 0.5 * volga * dsigma * dsigma
+        
+        # Calculate total P&L
+        total_pnl = end_result - start_result['price']
+        unexplained_pnl = total_pnl - (delta_pnl + gamma_pnl + theta_pnl + 
+                                    vega_pnl + vanna_pnl + volga_pnl)
+        
+        return {
+            'total_pnl': total_pnl,
+            'delta_pnl': delta_pnl,
+            'gamma_pnl': gamma_pnl,
+            'theta_pnl': theta_pnl,
+            'vega_pnl': vega_pnl,
+            'vanna_pnl': vanna_pnl,
+            'volga_pnl': volga_pnl,
+            'unexplained_pnl': unexplained_pnl
+        }
 
 class SABRModel:
 
