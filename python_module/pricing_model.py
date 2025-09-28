@@ -489,8 +489,7 @@ class SABRModel:
         bounds = (lower_bounds, upper_bounds)
         result = least_squares(objective, x0=init_guess, args=(F, T, rho, nu, r, K_min, K_max, K_var), bounds=bounds)
         return result.x[0]
-    
-    
+      
 class HestonHullWhiteModel:
 
     @staticmethod
