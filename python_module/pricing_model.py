@@ -255,6 +255,77 @@ class BSMModel:
             'unexplained_pnl': unexplained_pnl
         }
 
+class MultiAssetBSMModel:
+
+    @staticmethod
+    def compute_montecarlo(
+        S: List[float], T: float, r: float, g: List[float], q: List[float],
+        sigma: List[float], rho: Union[List[List[float]], np.ndarray],
+        n_steps: int, n_paths: int, seed: bool = True, seed_value: Optional[int] = 44
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Simulates correlated asset price paths using Geometric Brownian Motion.
+
+        Args:
+            S: List of spot prices per asset
+            T: Time to maturity (in years)
+            r: Risk-free rate
+            g: List of growth spreads per asset
+            q: List of dividend yields per asset
+            sigma: List of volatilities per asset
+            rho: Correlation matrix between assets
+            n_steps: Number of time steps
+            n_paths: Number of simulation paths
+            seed: If True, sets random seed for reproducibility
+
+        Returns:
+            Dictionary keyed by asset index containing DataFrame of simulated paths
+            (rows: time steps, columns: paths)
+        """
+        S_array = np.asarray(S, dtype=float)
+        g_array = np.asarray(g, dtype=float)
+        q_array = np.asarray(q, dtype=float)
+        sigma_array = np.asarray(sigma, dtype=float)
+
+        n_assets = S_array.size
+        if not (g_array.size == q_array.size == sigma_array.size == n_assets):
+            raise ValueError("S, g, q, and sigma must have the same length")
+
+        rho_matrix = np.asarray(rho, dtype=float)
+        if rho_matrix.shape != (n_assets, n_assets):
+            raise ValueError("rho must be a square matrix matching the number of assets")
+        if not np.allclose(rho_matrix, rho_matrix.transpose()):
+            raise ValueError("rho must be symmetric")
+
+        dt = T / n_steps
+        if seed:
+            np.random.seed(seed_value)
+
+        try:
+            chol = np.linalg.cholesky(rho_matrix)
+        except np.linalg.LinAlgError as exc:
+            raise ValueError("rho must be positive semi-definite") from exc
+
+        standard_normals = np.random.normal(0, 1, (n_steps, n_paths, n_assets))
+        paths = np.zeros((n_assets, n_paths, n_steps + 1))
+        paths[:, :, 0] = S_array[:, None]
+
+        drift = (r + g_array - q_array - 0.5 * sigma_array ** 2) * dt
+        diffusion_scale = sigma_array * np.sqrt(dt)
+
+        for step in range(1, n_steps + 1):
+            # Imposes the target correlation structure across assets for this time step
+            correlated_shocks = standard_normals[step - 1] @ chol.transpose()
+            increments = drift + diffusion_scale * correlated_shocks
+            paths[:, :, step] = paths[:, :, step - 1] * np.exp(increments.transpose())
+
+        results: Dict[str, pd.DataFrame] = {}
+        for asset_idx in range(n_assets):
+            asset_paths = pd.DataFrame(paths[asset_idx].transpose())
+            results[f"asset_{asset_idx}"] = asset_paths
+
+        return results
+
 class SABRModel:
 
     @staticmethod
